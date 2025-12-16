@@ -1,0 +1,1680 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!doctype html>
+<html lang="hi" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Management App</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+    
+    .stock-card {
+      transition: all 0.3s ease;
+    }
+    
+    .stock-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    }
+    
+    .low-stock {
+      border-left: 4px solid #ef4444;
+    }
+    
+    .normal-stock {
+      border-left: 4px solid #10b981;
+    }
+    
+    .loading-spinner {
+      border: 3px solid #f3f4f6;
+      border-top: 3px solid #3b82f6;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      color: white;
+      font-weight: 500;
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    .toast.success {
+      background-color: #10b981;
+    }
+    
+    .toast.error {
+      background-color: #ef4444;
+    }
+    
+    .modal-backdrop {
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    .admin-badge {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .user-badge {
+      background-color: #3b82f6;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full overflow-auto" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"><!-- Screen 1: Login Screen -->
+   <div id="loginScreen" class="min-h-full flex items-center justify-center px-4">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-md p-8">
+     <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-800">🔐 Login</h1>
+      <p class="text-gray-600 mt-2">Stock Management System</p>
+     </div>
+     <form id="loginForm">
+      <div class="mb-4"><label for="username" class="block text-sm font-semibold text-gray-700 mb-2">Username</label> <input type="text" id="username" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter username">
+      </div>
+      <div class="mb-6"><label for="password" class="block text-sm font-semibold text-gray-700 mb-2">Password</label> <input type="password" id="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter password">
+      </div>
+      <div id="loginError" class="hidden mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+       Invalid username or password!
+      </div><button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-300"> Login </button>
+     </form>
+    </div>
+   </div><!-- Screen 2: Main Menu with 3 Buttons -->
+   <div id="mainMenu" class="min-h-full flex items-center justify-center px-4" style="display: none;">
+    <div class="max-w-4xl w-full"><!-- Header -->
+     <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <div class="flex justify-between items-center">
+       <div class="flex items-center gap-3"><span class="text-2xl">👤</span>
+        <div>
+         <div class="flex items-center gap-2">
+          <p class="font-bold text-gray-800" id="loggedInUser">Shariz</p><span id="userRoleBadge" class="admin-badge">ADMIN</span>
+         </div>
+         <p class="text-sm text-gray-600">Stock Management System</p>
+        </div>
+       </div><button id="logoutButton" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-300"> 🚪 Logout </button>
+      </div>
+     </div><!-- Menu Title -->
+     <div class="text-center mb-8">
+      <h1 id="appTitle" class="text-4xl font-bold text-white mb-2">Stock Management</h1>
+      <p class="text-white text-lg">Choose an option to continue</p>
+     </div><!-- Menu Buttons -->
+     <div class="grid grid-cols-1 md:grid-cols-3 gap-6"><!-- Add Item Button --> <button id="menuAddItem" class="bg-white hover:bg-gray-50 rounded-lg shadow-xl p-8 transition duration-300 transform hover:scale-105">
+       <div class="text-6xl mb-4">
+        ➕
+       </div><h2 class="text-2xl font-bold text-gray-800 mb-2">Add Item</h2><p class="text-gray-600">Add new products to inventory</p></button> <!-- View Stock Button --> <button id="menuViewStock" class="bg-white hover:bg-gray-50 rounded-lg shadow-xl p-8 transition duration-300 transform hover:scale-105">
+       <div class="text-6xl mb-4">
+        📦
+       </div><h2 class="text-2xl font-bold text-gray-800 mb-2">Stock</h2><p class="text-gray-600">View and manage stock items</p></button> <!-- Dashboard Button --> <button id="menuDashboard" class="bg-white hover:bg-gray-50 rounded-lg shadow-xl p-8 transition duration-300 transform hover:scale-105">
+       <div class="text-6xl mb-4">
+        📊
+       </div><h2 class="text-2xl font-bold text-gray-800 mb-2">Dashboard</h2><p class="text-gray-600">View inventory overview</p></button> <!-- Settings Button --> <button id="menuSettings" class="bg-white hover:bg-gray-50 rounded-lg shadow-xl p-8 transition duration-300 transform hover:scale-105">
+       <div class="text-6xl mb-4">
+        ⚙️
+       </div><h2 class="text-2xl font-bold text-gray-800 mb-2">Settings</h2><p class="text-gray-600">Configure app settings</p></button>
+     </div>
+    </div>
+   </div><!-- Screen 3a: Add Item Screen -->
+   <div id="addItemScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-2xl mx-auto"><button id="backFromAdd" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Menu </button>
+     <div class="bg-white rounded-lg shadow-lg p-8">
+      <h2 class="text-3xl font-bold text-gray-800 mb-6">➕ Add New Item</h2>
+      <form id="addItemForm">
+       <div class="mb-4"><label for="addBrand" class="block text-sm font-semibold text-gray-700 mb-2">Brand</label> <select id="addBrand" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"> <option value="">Select Brand</option> </select>
+       </div>
+       <div class="mb-4"><label for="addProductType" class="block text-sm font-semibold text-gray-700 mb-2">Product Type</label> <select id="addProductType" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"> <option value="">Select Product Type</option> </select>
+       </div>
+       <div class="mb-4"><label for="addProductSize" class="block text-sm font-semibold text-gray-700 mb-2">Product Size</label> <select id="addProductSize" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"> <option value="">Select Product Size</option> </select>
+       </div>
+       <div class="mb-4"><label for="addCategory" class="block text-sm font-semibold text-gray-700 mb-2">Category</label> <input type="text" id="addCategory" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+       </div>
+       <div class="grid grid-cols-2 gap-4 mb-4">
+        <div><label for="addQuantity" class="block text-sm font-semibold text-gray-700 mb-2">Quantity</label> <input type="number" id="addQuantity" required min="0" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div><label for="addMinStock" class="block text-sm font-semibold text-gray-700 mb-2">Min Stock</label> <input type="number" id="addMinStock" required min="0" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+       </div>
+       <div class="mb-6"><label for="addPrice" class="block text-sm font-semibold text-gray-700 mb-2">Price (₹)</label> <input type="number" id="addPrice" required min="0" step="0.01" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+       </div><button type="submit" id="addItemSubmit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-300"> Add Item to Stock </button>
+      </form>
+     </div>
+    </div>
+   </div><!-- Screen 3b: Brand Selection Screen -->
+   <div id="brandSelectionScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-6xl mx-auto"><button id="backFromBrandSelection" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Menu </button>
+     <div class="text-center mb-8">
+      <h2 class="text-3xl font-bold text-white mb-2">Select Brand</h2>
+      <p class="text-white text-lg">Choose a brand to view products</p>
+     </div>
+     <div id="brandButtons" class="grid grid-cols-1 md:grid-cols-3 gap-6"><!-- Brand buttons will be rendered here -->
+     </div>
+    </div>
+   </div><!-- Screen 3c: Product Type Selection Screen -->
+   <div id="productSelectionScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-6xl mx-auto"><button id="backFromProductSelection" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Brands </button>
+     <div class="text-center mb-8">
+      <h2 class="text-3xl font-bold text-white mb-2">Select Product Type</h2>
+      <p class="text-white text-lg">Brand: <span id="selectedBrandName" class="font-bold"></span></p>
+     </div>
+     <div id="productButtons" class="grid grid-cols-1 md:grid-cols-4 gap-6"><!-- Product buttons will be rendered here -->
+     </div>
+    </div>
+   </div><!-- Screen 3d: Product Size Selection Screen -->
+   <div id="sizeSelectionScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-6xl mx-auto"><button id="backFromSizeSelection" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Products </button>
+     <div class="text-center mb-8">
+      <h2 class="text-3xl font-bold text-white mb-2">Select Product Size</h2>
+      <p class="text-white text-lg"><span id="selectedBrandName2" class="font-bold"></span> - <span id="selectedProductName" class="font-bold"></span></p>
+     </div>
+     <div id="sizeButtons" class="grid grid-cols-1 md:grid-cols-4 gap-6"><!-- Size buttons will be rendered here -->
+     </div>
+    </div>
+   </div><!-- Screen 3e: Stock Items Screen -->
+   <div id="stockItemsScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-6xl mx-auto"><button id="backFromStockItems" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Sizes </button>
+     <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <div class="flex justify-between items-center">
+       <div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Stock Items</h2>
+        <p class="text-gray-600" id="selectedStockPath"></p>
+       </div><button id="exportExcelStock" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center gap-2 shadow-lg"> <span class="text-xl">📊</span> <span>Export to Excel</span> </button>
+      </div>
+     </div>
+     <div id="stockItemsList" class="space-y-4"><!-- Stock items will be rendered here -->
+     </div>
+    </div>
+   </div><!-- Screen 3f: Dashboard Screen -->
+   <div id="dashboardScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-7xl mx-auto"><button id="backFromDashboard" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Menu </button>
+     <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <div class="flex justify-between items-center">
+       <div>
+        <h2 class="text-3xl font-bold text-gray-800 mb-2">📊 Inventory Dashboard</h2>
+        <p class="text-gray-600">Overview of all brands and sizes</p>
+       </div><button id="exportExcelDashboard" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center gap-2 shadow-lg"> <span class="text-xl">📊</span> <span>Export to Excel</span> </button>
+      </div>
+     </div>
+     <div id="dashboardContent" class="space-y-8"><!-- Dashboard cards will be rendered here -->
+     </div>
+    </div>
+   </div><!-- Screen 3g: Settings Screen -->
+   <div id="settingsScreen" class="min-h-full py-8 px-4" style="display: none;">
+    <div class="max-w-2xl mx-auto"><button id="backFromSettings" class="bg-white hover:bg-gray-50 text-gray-800 font-semibold py-2 px-4 rounded-lg mb-6 transition duration-300"> ← Back to Menu </button>
+     <div class="bg-white rounded-lg shadow-lg p-8">
+      <h2 class="text-3xl font-bold text-gray-800 mb-6">⚙️ Settings</h2>
+      <div class="space-y-6"><!-- Admin Info -->
+       <div class="border-b pb-4">
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">Current User</h3>
+        <div class="bg-gray-50 p-4 rounded-lg">
+         <div class="flex items-center gap-2 mb-2">
+          <p class="text-lg font-bold text-gray-800" id="settingsUsername">Shariz</p><span id="settingsRoleBadge" class="admin-badge">ADMIN</span>
+         </div>
+         <p class="text-sm text-gray-600">Logged in</p>
+        </div>
+       </div><!-- App Statistics -->
+       <div class="border-b pb-4">
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">App Statistics</h3>
+        <div class="space-y-2">
+         <div class="flex justify-between bg-gray-50 p-3 rounded-lg"><span class="text-gray-700">Total Products</span> <span class="font-bold text-gray-800" id="settingsTotalItems">0</span>
+         </div>
+         <div class="flex justify-between bg-gray-50 p-3 rounded-lg"><span class="text-gray-700">Total Inventory Value</span> <span class="font-bold text-green-600" id="settingsTotalValue">₹0</span>
+         </div>
+         <div class="flex justify-between bg-gray-50 p-3 rounded-lg"><span class="text-gray-700">Low Stock Alerts</span> <span class="font-bold text-red-600" id="settingsLowStock">0</span>
+         </div>
+        </div><!-- Excel Export Button -->
+        <div class="mt-4"><button id="exportExcelBtn" class="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center gap-2 shadow-lg"> <span class="text-xl">📊</span> <span>Export to Excel</span> </button>
+        </div>
+       </div><!-- User Management (Admin Only) -->
+       <div id="userManagementSection" class="border-b pb-4" style="display: none;">
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">User Management</h3><!-- Add User Form -->
+        <div class="bg-blue-50 p-4 rounded-lg mb-4">
+         <h4 class="font-semibold text-gray-800 mb-3">Add New User</h4>
+         <form id="addUserForm">
+          <div class="mb-3"><label for="newUsername" class="block text-sm font-semibold text-gray-700 mb-1">Username</label> <input type="text" id="newUsername" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          </div>
+          <div class="mb-3"><label for="newPassword" class="block text-sm font-semibold text-gray-700 mb-1">Password</label> <input type="password" id="newPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          </div>
+          <div class="mb-3"><label for="newRole" class="block text-sm font-semibold text-gray-700 mb-1">Role</label> <select id="newRole" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"> <option value="user">User</option> <option value="admin">Admin</option> </select>
+          </div><button type="submit" id="addUserSubmit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-300"> Add User </button>
+         </form>
+        </div><!-- User List -->
+        <div>
+         <h4 class="font-semibold text-gray-800 mb-3">All Users</h4>
+         <div id="userList" class="space-y-2"><!-- Users will be listed here -->
+         </div>
+        </div>
+       </div><!-- Brand Management (Admin Only) -->
+       <div id="brandManagementSection" class="border-b pb-4" style="display: none;">
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">Brand Management</h3><!-- Add Brand Form -->
+        <div class="bg-green-50 p-4 rounded-lg mb-4">
+         <h4 class="font-semibold text-gray-800 mb-3">Add New Brand</h4>
+         <form id="addBrandForm">
+          <div class="mb-3"><label for="newBrandName" class="block text-sm font-semibold text-gray-700 mb-1">Brand Name</label> <input type="text" id="newBrandName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+          </div><button type="submit" id="addBrandSubmit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded-lg transition duration-300"> Add Brand </button>
+         </form>
+        </div><!-- Brand List -->
+        <div>
+         <h4 class="font-semibold text-gray-800 mb-3">All Brands</h4>
+         <div id="brandList" class="space-y-2"><!-- Brands will be listed here -->
+         </div>
+        </div>
+       </div><!-- Product Management (Admin Only) -->
+       <div id="productManagementSection" class="border-b pb-4" style="display: none;">
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">Product Type Management</h3><!-- Add Product Form -->
+        <div class="bg-purple-50 p-4 rounded-lg mb-4">
+         <h4 class="font-semibold text-gray-800 mb-3">Add New Product Type</h4>
+         <form id="addProductForm">
+          <div class="mb-3"><label for="newProductName" class="block text-sm font-semibold text-gray-700 mb-1">Product Type Name</label> <input type="text" id="newProductName" required placeholder="e.g., SOYA SO, CANOLA SO, PALM OLIEN" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+          </div><button type="submit" id="addProductSubmit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 rounded-lg transition duration-300"> Add Product Type </button>
+         </form>
+        </div><!-- Product List -->
+        <div>
+         <h4 class="font-semibold text-gray-800 mb-3">All Product Types</h4>
+         <div id="productList" class="space-y-2"><!-- Products will be listed here -->
+         </div>
+        </div>
+       </div><!-- Size Management (Admin Only) -->
+       <div id="sizeManagementSection" class="border-b pb-4" style="display: none;">
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">Product Size Management</h3><!-- Add Size Form -->
+        <div class="bg-orange-50 p-4 rounded-lg mb-4">
+         <h4 class="font-semibold text-gray-800 mb-3">Add New Product Size</h4>
+         <form id="addSizeForm">
+          <div class="mb-3"><label for="newSizeName" class="block text-sm font-semibold text-gray-700 mb-1">Product Size Name</label> <input type="text" id="newSizeName" required placeholder="e.g., 1L, 5L, 10L, 15L" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+          </div><button type="submit" id="addSizeSubmit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 rounded-lg transition duration-300"> Add Product Size </button>
+         </form>
+        </div><!-- Size List -->
+        <div>
+         <h4 class="font-semibold text-gray-800 mb-3">All Product Sizes</h4>
+         <div id="sizeList" class="space-y-2"><!-- Sizes will be listed here -->
+         </div>
+        </div>
+       </div><!-- App Info -->
+       <div>
+        <h3 class="text-xl font-semibold text-gray-800 mb-3">About</h3>
+        <div class="bg-gray-50 p-4 rounded-lg">
+         <p class="text-sm text-gray-600 mb-2">Stock Management System</p>
+         <p class="text-xs text-gray-500">Version 1.0</p>
+         <p class="text-xs text-gray-500 mt-2">Manage your inventory efficiently</p>
+        </div>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div><!-- Edit Modal -->
+   <div id="modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50" style="display: none;">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 p-6">
+     <h2 id="modalTitle" class="text-2xl font-bold text-gray-800 mb-4">Edit Item</h2>
+     <form id="stockForm">
+      <div class="mb-4"><label for="category" class="block text-sm font-semibold text-gray-700 mb-2">Category</label> <input type="text" id="category" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+      </div>
+      <div class="grid grid-cols-2 gap-4 mb-4">
+       <div><label for="quantity" class="block text-sm font-semibold text-gray-700 mb-2">Quantity</label> <input type="number" id="quantity" required min="0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+       </div>
+       <div><label for="minStock" class="block text-sm font-semibold text-gray-700 mb-2">Min Stock</label> <input type="number" id="minStock" required min="0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+       </div>
+      </div>
+      <div class="mb-6"><label for="price" class="block text-sm font-semibold text-gray-700 mb-2">Price (₹)</label> <input type="number" id="price" required min="0" step="0.01" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+      </div>
+      <div class="flex gap-3"><button type="submit" id="submitButton" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-300 flex items-center justify-center"> <span id="submitText">Update Item</span> </button> <button type="button" id="cancelButton" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 rounded-lg transition duration-300"> Cancel </button>
+      </div>
+     </form>
+    </div>
+   </div>
+  </div>
+  <script>
+    let currentData = [];
+    let currentUsers = [];
+    let currentBrands = [];
+    let currentProducts = [];
+    let currentSizes = [];
+    let editingItem = null;
+    let isSubmitting = false;
+    let isLoggedIn = false;
+    let currentUsername = "";
+    let currentUserRole = "";
+    let selectedBrand = null;
+    let selectedProduct = null;
+    let selectedSize = null;
+    
+    const ADMIN_USERNAME = "Shariz";
+    const ADMIN_PASSWORD = "1327";
+    const ADMIN_ROLE = "admin";
+    
+    const defaultConfig = {
+      app_title: "Stock Management",
+      add_button_text: "Add New Item",
+      empty_message: "No items in inventory",
+      background_color: "#667eea",
+      surface_color: "#ffffff",
+      text_color: "#1f2937",
+      primary_action_color: "#3b82f6",
+      secondary_action_color: "#6b7280",
+      font_family: "system-ui",
+      font_size: 16
+    };
+
+    const dataHandler = {
+      onDataChanged(data) {
+        const stockItems = data.filter(item => !item.username && !item.brand_name && !item.product_name_type && !item.product_size_name);
+        const userRecords = data.filter(item => item.username);
+        const brands = data.filter(item => item.brand_name);
+        const products = data.filter(item => item.product_name_type);
+        const sizes = data.filter(item => item.product_size_name);
+        
+        currentData = stockItems;
+        currentUsers = userRecords;
+        currentBrands = brands;
+        currentProducts = products;
+        currentSizes = sizes;
+        
+        updateStats();
+        renderUserList();
+        renderBrandList();
+        renderProductList();
+        renderSizeList();
+        renderBrandButtons();
+        renderDashboard();
+        if (selectedBrand && selectedProduct && selectedSize) {
+          renderFilteredStockItems();
+        }
+      }
+    };
+
+    async function onConfigChange(config) {
+      const appTitle = document.getElementById('appTitle');
+      const app = document.getElementById('app');
+      
+      const customFont = config.font_family || defaultConfig.font_family;
+      const baseSize = config.font_size || defaultConfig.font_size;
+      const baseFontStack = 'system-ui, -apple-system, sans-serif';
+      
+      if (appTitle) {
+        appTitle.textContent = config.app_title || defaultConfig.app_title;
+        appTitle.style.fontFamily = `${customFont}, ${baseFontStack}`;
+        appTitle.style.fontSize = `${baseSize * 2.5}px`;
+      }
+      
+      app.style.background = `linear-gradient(135deg, ${config.background_color || defaultConfig.background_color} 0%, #764ba2 100%)`;
+      
+      document.body.style.fontFamily = `${customFont}, ${baseFontStack}`;
+      document.body.style.fontSize = `${baseSize}px`;
+    }
+
+    function showToast(message, type = 'success') {
+      const existingToast = document.querySelector('.toast');
+      if (existingToast) {
+        existingToast.remove();
+      }
+      
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function updateStats() {
+      const totalItems = currentData.length;
+      const totalValue = currentData.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+      const lowStockCount = currentData.filter(item => item.quantity <= item.min_stock).length;
+      
+      const settingsTotalItems = document.getElementById('settingsTotalItems');
+      const settingsTotalValue = document.getElementById('settingsTotalValue');
+      const settingsLowStock = document.getElementById('settingsLowStock');
+      
+      if (settingsTotalItems) settingsTotalItems.textContent = totalItems;
+      if (settingsTotalValue) settingsTotalValue.textContent = `₹${totalValue.toFixed(2)}`;
+      if (settingsLowStock) settingsLowStock.textContent = lowStockCount;
+    }
+
+    function renderUserList() {
+      const userListEl = document.getElementById('userList');
+      if (!userListEl) return;
+      
+      let allUsers = [...currentUsers];
+      const adminExists = allUsers.some(u => u.username === ADMIN_USERNAME);
+      if (!adminExists) {
+        allUsers.unshift({ 
+          username: ADMIN_USERNAME, 
+          role: ADMIN_ROLE, 
+          created_at: new Date().toISOString(), 
+          last_login: localStorage.getItem('admin_last_login') || null, 
+          isDefault: true 
+        });
+      }
+      
+      if (allUsers.length === 0) {
+        userListEl.innerHTML = '<p class="text-gray-500 text-sm">No users found</p>';
+        return;
+      }
+      
+      userListEl.innerHTML = allUsers.map(user => {
+        const isAdmin = user.role === 'admin';
+        const isDefaultAdmin = user.username === ADMIN_USERNAME;
+        const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString('en-IN', { 
+          dateStyle: 'short', 
+          timeStyle: 'short' 
+        }) : 'Never';
+        
+        return `
+          <div class="bg-gray-50 p-3 rounded-lg">
+            <div class="flex justify-between items-center mb-2">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-gray-800">${user.username}</span>
+                <span class="${isAdmin ? 'admin-badge' : 'user-badge'}">${isAdmin ? 'ADMIN' : 'USER'}</span>
+              </div>
+              ${!isDefaultAdmin && user.__backendId ? `<button onclick="deleteUser('${user.__backendId}')" class="text-red-600 hover:text-red-800 font-semibold text-sm" id="deleteUser-${user.__backendId}">Delete</button>` : '<span class="text-gray-400 text-sm">System</span>'}
+            </div>
+            <div class="text-xs text-gray-500">
+              Last Login: ${lastLogin}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderBrandList() {
+      const brandListEl = document.getElementById('brandList');
+      if (!brandListEl) return;
+      
+      if (currentBrands.length === 0) {
+        brandListEl.innerHTML = '<p class="text-gray-500 text-sm">No brands added yet</p>';
+        return;
+      }
+      
+      brandListEl.innerHTML = currentBrands.map(brand => {
+        return `
+          <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+            <span class="font-semibold text-gray-800">${brand.brand_name}</span>
+            <button onclick="deleteBrand('${brand.__backendId}')" class="text-red-600 hover:text-red-800 font-semibold text-sm" id="deleteBrand-${brand.__backendId}">Delete</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderProductList() {
+      const productListEl = document.getElementById('productList');
+      if (!productListEl) return;
+      
+      if (currentProducts.length === 0) {
+        productListEl.innerHTML = '<p class="text-gray-500 text-sm">No products added yet</p>';
+        return;
+      }
+      
+      productListEl.innerHTML = currentProducts.map(product => {
+        return `
+          <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+            <span class="font-semibold text-gray-800">${product.product_name_type}</span>
+            <button onclick="deleteProduct('${product.__backendId}')" class="text-red-600 hover:text-red-800 font-semibold text-sm" id="deleteProduct-${product.__backendId}">Delete</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSizeList() {
+      const sizeListEl = document.getElementById('sizeList');
+      if (!sizeListEl) return;
+      
+      if (currentSizes.length === 0) {
+        sizeListEl.innerHTML = '<p class="text-gray-500 text-sm">No sizes added yet</p>';
+        return;
+      }
+      
+      sizeListEl.innerHTML = currentSizes.map(size => {
+        return `
+          <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+            <span class="font-semibold text-gray-800">${size.product_size_name}</span>
+            <button onclick="deleteSize('${size.__backendId}')" class="text-red-600 hover:text-red-800 font-semibold text-sm" id="deleteSize-${size.__backendId}">Delete</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderDashboard() {
+      const dashboardContent = document.getElementById('dashboardContent');
+      if (!dashboardContent) return;
+      
+      if (currentBrands.length === 0) {
+        dashboardContent.innerHTML = '<div class="bg-white rounded-lg shadow-lg p-8 text-center"><p class="text-gray-500 text-lg">No brands available yet</p></div>';
+        return;
+      }
+      
+      dashboardContent.innerHTML = currentBrands.map(brand => {
+        const brandItems = currentData.filter(item => item.brand_id === brand.__backendId);
+        
+        const sizeGroups = {};
+        currentSizes.forEach(size => {
+          const sizeItems = brandItems.filter(item => item.size_id === size.__backendId);
+          const totalQty = sizeItems.reduce((sum, item) => sum + item.quantity, 0);
+          const totalValue = sizeItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+          const itemCount = sizeItems.length;
+          
+          if (totalQty > 0 || itemCount > 0) {
+            sizeGroups[size.__backendId] = {
+              name: size.product_size_name,
+              quantity: totalQty,
+              value: totalValue,
+              items: itemCount
+            };
+          }
+        });
+        
+        const totalBrandQty = brandItems.reduce((sum, item) => sum + item.quantity, 0);
+        const totalBrandValue = brandItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        
+        return `
+          <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-white">
+              <div class="flex justify-between items-center">
+                <div>
+                  <h3 class="text-2xl font-bold mb-2">🏷️ ${brand.brand_name}</h3>
+                  <p class="text-blue-100">Total Products: ${brandItems.length}</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-3xl font-bold">${totalBrandQty}</p>
+                  <p class="text-blue-100 text-sm">Total Units</p>
+                </div>
+              </div>
+              <div class="mt-4 pt-4 border-t border-blue-400">
+                <p class="text-xl font-semibold">₹${totalBrandValue.toFixed(2)}</p>
+                <p class="text-blue-100 text-sm">Total Inventory Value</p>
+              </div>
+            </div>
+            
+            <div class="p-6">
+              <h4 class="text-lg font-semibold text-gray-800 mb-4">Size Breakdown</h4>
+              ${Object.keys(sizeGroups).length > 0 ? `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  ${Object.values(sizeGroups).map(sizeData => `
+                    <div class="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border-l-4 border-blue-500">
+                      <div class="flex items-center justify-between mb-3">
+                        <h5 class="font-bold text-gray-800 text-lg">📏 ${sizeData.name}</h5>
+                        <span class="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-semibold">${sizeData.items}</span>
+                      </div>
+                      <div class="space-y-2">
+                        <div class="flex justify-between">
+                          <span class="text-gray-600">Quantity:</span>
+                          <span class="font-bold text-gray-800">${sizeData.quantity}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span class="text-gray-600">Value:</span>
+                          <span class="font-bold text-green-600">₹${sizeData.value.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : '<p class="text-gray-500 text-center py-4">No inventory for this brand yet</p>'}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    function renderBrandButtons() {
+      const brandButtonsEl = document.getElementById('brandButtons');
+      if (!brandButtonsEl) return;
+      
+      if (currentBrands.length === 0) {
+        brandButtonsEl.innerHTML = '<div class="col-span-full"><p class="text-white text-center py-8 text-lg">No brands available. Admin can add brands from Settings.</p></div>';
+        return;
+      }
+      
+      brandButtonsEl.innerHTML = currentBrands.map(brand => {
+        return `
+          <button onclick="selectBrand('${brand.__backendId}')" class="bg-white hover:bg-gray-50 rounded-lg shadow-lg p-6 transition duration-300 transform hover:scale-105">
+            <div class="text-4xl mb-3">🏷️</div>
+            <h3 class="text-xl font-bold text-gray-800">${brand.brand_name}</h3>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderProductButtons() {
+      const productButtonsEl = document.getElementById('productButtons');
+      if (!productButtonsEl) return;
+      
+      if (currentProducts.length === 0) {
+        productButtonsEl.innerHTML = '<div class="col-span-full"><p class="text-white text-center py-8 text-lg">No products available. Admin can add products from Settings.</p></div>';
+        return;
+      }
+      
+      productButtonsEl.innerHTML = currentProducts.map(product => {
+        return `
+          <button onclick="selectProduct('${product.__backendId}')" class="bg-white hover:bg-gray-50 rounded-lg shadow-lg p-6 transition duration-300 transform hover:scale-105">
+            <div class="text-4xl mb-3">📦</div>
+            <h3 class="text-xl font-bold text-gray-800">${product.product_name_type}</h3>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderSizeButtons() {
+      const sizeButtonsEl = document.getElementById('sizeButtons');
+      if (!sizeButtonsEl) return;
+      
+      if (currentSizes.length === 0) {
+        sizeButtonsEl.innerHTML = '<div class="col-span-full"><p class="text-white text-center py-8 text-lg">No sizes available. Admin can add sizes from Settings.</p></div>';
+        return;
+      }
+      
+      sizeButtonsEl.innerHTML = currentSizes.map(size => {
+        const totalQty = currentData
+          .filter(item => 
+            item.brand_id === selectedBrand.__backendId && 
+            item.product_id === selectedProduct.__backendId &&
+            item.size_id === size.__backendId
+          )
+          .reduce((sum, item) => sum + item.quantity, 0);
+        
+        return `
+          <button onclick="selectSize('${size.__backendId}')" class="warehouse-card rounded-2xl p-8 transition duration-300 transform hover:scale-105">
+            <div class="warehouse-icon mb-4">📏</div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-3">${size.product_size_name}</h3>
+            <div class="quantity-badge">
+              <span class="text-base">Total: ${totalQty}</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectBrand(brandId) {
+      const brand = currentBrands.find(b => b.__backendId === brandId);
+      if (brand) {
+        selectedBrand = brand;
+        document.getElementById('brandSelectionScreen').style.display = 'none';
+        document.getElementById('productSelectionScreen').style.display = 'block';
+        document.getElementById('selectedBrandName').textContent = brand.brand_name;
+        renderProductButtons();
+      }
+    }
+
+    function selectProduct(productId) {
+      const product = currentProducts.find(p => p.__backendId === productId);
+      if (product && selectedBrand) {
+        selectedProduct = product;
+        document.getElementById('productSelectionScreen').style.display = 'none';
+        document.getElementById('sizeSelectionScreen').style.display = 'block';
+        document.getElementById('selectedBrandName2').textContent = selectedBrand.brand_name;
+        document.getElementById('selectedProductName').textContent = product.product_name_type;
+        renderSizeButtons();
+      }
+    }
+
+    function selectSize(sizeId) {
+      const size = currentSizes.find(s => s.__backendId === sizeId);
+      if (size && selectedBrand && selectedProduct) {
+        selectedSize = size;
+        document.getElementById('sizeSelectionScreen').style.display = 'none';
+        document.getElementById('stockItemsScreen').style.display = 'block';
+        document.getElementById('selectedStockPath').textContent = `${selectedBrand.brand_name} → ${selectedProduct.product_name_type} → ${size.product_size_name}`;
+        renderFilteredStockItems();
+      }
+    }
+
+    function renderFilteredStockItems() {
+      const stockItemsListEl = document.getElementById('stockItemsList');
+      if (!stockItemsListEl) return;
+      
+      const filteredItems = currentData.filter(item => 
+        item.brand_id === selectedBrand.__backendId && 
+        item.product_id === selectedProduct.__backendId &&
+        item.size_id === selectedSize.__backendId
+      );
+      
+      if (filteredItems.length === 0) {
+        stockItemsListEl.innerHTML = `
+          <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+            <p class="text-gray-500 text-lg">No items found for this combination</p>
+            <p class="text-gray-400 text-sm mt-2">Add items using the Add Item screen</p>
+          </div>
+        `;
+        return;
+      }
+      
+      stockItemsListEl.innerHTML = filteredItems.map(item => {
+        const isLowStock = item.quantity <= item.min_stock;
+        const stockClass = isLowStock ? 'low-stock' : 'normal-stock';
+        const totalValue = (item.quantity * item.price).toFixed(2);
+        
+        return `
+          <div class="stock-card bg-white rounded-lg shadow-lg p-6 ${stockClass}">
+            <div class="flex justify-between items-start mb-4">
+              <div class="flex-1">
+                <h3 class="text-xl font-bold text-gray-800">${selectedSize.product_size_name}</h3>
+                <p class="text-sm text-gray-600 mt-1">Category: ${item.category}</p>
+              </div>
+              ${isLowStock ? '<span class="bg-red-100 text-red-800 text-xs font-semibold px-3 py-1 rounded-full">Low Stock</span>' : ''}
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <p class="text-sm text-gray-600">Quantity</p>
+                <p class="text-2xl font-bold text-gray-800">${item.quantity}</p>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600">Min Stock</p>
+                <p class="text-lg font-semibold text-gray-600">${item.min_stock}</p>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600">Price</p>
+                <p class="text-lg font-semibold text-gray-800">₹${item.price}</p>
+              </div>
+              <div>
+                <p class="text-sm text-gray-600">Total Value</p>
+                <p class="text-lg font-semibold text-green-600">₹${totalValue}</p>
+              </div>
+            </div>
+            
+            <div class="flex gap-2 pt-4 border-t border-gray-200">
+              <button onclick="editStock('${item.__backendId}')" class="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 rounded-lg transition duration-300">
+                ✏️ Edit
+              </button>
+              <button onclick="showDeleteConfirm('${item.__backendId}')" class="flex-1 bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-2 rounded-lg transition duration-300" id="delete-${item.__backendId}">
+                🗑️ Delete
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function deleteBrand(backendId) {
+      const deleteButton = document.getElementById(`deleteBrand-${backendId}`);
+      const originalText = deleteButton.textContent;
+      
+      deleteButton.textContent = 'Confirm?';
+      deleteButton.style.color = '#dc2626';
+      
+      const confirmDelete = async () => {
+        deleteButton.disabled = true;
+        deleteButton.textContent = 'Deleting...';
+        
+        const brand = currentBrands.find(b => b.__backendId === backendId);
+        if (brand) {
+          const result = await window.dataSdk.delete(brand);
+          
+          if (result.isOk) {
+            showToast('Brand deleted successfully!', 'success');
+          } else {
+            showToast('Error deleting brand. Please try again.', 'error');
+            deleteButton.disabled = false;
+            deleteButton.textContent = originalText;
+          }
+        }
+      };
+      
+      deleteButton.onclick = confirmDelete;
+      
+      setTimeout(() => {
+        if (deleteButton.textContent === 'Confirm?') {
+          deleteButton.textContent = originalText;
+          deleteButton.style.color = '';
+          deleteButton.onclick = () => deleteBrand(backendId);
+        }
+      }, 3000);
+    }
+
+    async function deleteProduct(backendId) {
+      const deleteButton = document.getElementById(`deleteProduct-${backendId}`);
+      const originalText = deleteButton.textContent;
+      
+      deleteButton.textContent = 'Confirm?';
+      deleteButton.style.color = '#dc2626';
+      
+      const confirmDelete = async () => {
+        deleteButton.disabled = true;
+        deleteButton.textContent = 'Deleting...';
+        
+        const product = currentProducts.find(p => p.__backendId === backendId);
+        if (product) {
+          const result = await window.dataSdk.delete(product);
+          
+          if (result.isOk) {
+            showToast('Product deleted successfully!', 'success');
+          } else {
+            showToast('Error deleting product. Please try again.', 'error');
+            deleteButton.disabled = false;
+            deleteButton.textContent = originalText;
+          }
+        }
+      };
+      
+      deleteButton.onclick = confirmDelete;
+      
+      setTimeout(() => {
+        if (deleteButton.textContent === 'Confirm?') {
+          deleteButton.textContent = originalText;
+          deleteButton.style.color = '';
+          deleteButton.onclick = () => deleteProduct(backendId);
+        }
+      }, 3000);
+    }
+
+    async function deleteSize(backendId) {
+      const deleteButton = document.getElementById(`deleteSize-${backendId}`);
+      const originalText = deleteButton.textContent;
+      
+      deleteButton.textContent = 'Confirm?';
+      deleteButton.style.color = '#dc2626';
+      
+      const confirmDelete = async () => {
+        deleteButton.disabled = true;
+        deleteButton.textContent = 'Deleting...';
+        
+        const size = currentSizes.find(s => s.__backendId === backendId);
+        if (size) {
+          const result = await window.dataSdk.delete(size);
+          
+          if (result.isOk) {
+            showToast('Size deleted successfully!', 'success');
+          } else {
+            showToast('Error deleting size. Please try again.', 'error');
+            deleteButton.disabled = false;
+            deleteButton.textContent = originalText;
+          }
+        }
+      };
+      
+      deleteButton.onclick = confirmDelete;
+      
+      setTimeout(() => {
+        if (deleteButton.textContent === 'Confirm?') {
+          deleteButton.textContent = originalText;
+          deleteButton.style.color = '';
+          deleteButton.onclick = () => deleteSize(backendId);
+        }
+      }, 3000);
+    }
+
+    async function deleteUser(backendId) {
+      const deleteButton = document.getElementById(`deleteUser-${backendId}`);
+      const originalText = deleteButton.textContent;
+      
+      deleteButton.textContent = 'Confirm?';
+      deleteButton.style.color = '#dc2626';
+      
+      const confirmDelete = async () => {
+        deleteButton.disabled = true;
+        deleteButton.textContent = 'Deleting...';
+        
+        const user = currentUsers.find(u => u.__backendId === backendId);
+        if (user) {
+          const result = await window.dataSdk.delete(user);
+          
+          if (result.isOk) {
+            showToast('User deleted successfully!', 'success');
+          } else {
+            showToast('Error deleting user. Please try again.', 'error');
+            deleteButton.disabled = false;
+            deleteButton.textContent = originalText;
+          }
+        }
+      };
+      
+      deleteButton.onclick = confirmDelete;
+      
+      setTimeout(() => {
+        if (deleteButton.textContent === 'Confirm?') {
+          deleteButton.textContent = originalText;
+          deleteButton.style.color = '';
+          deleteButton.onclick = () => deleteUser(backendId);
+        }
+      }, 3000);
+    }
+
+    function openModal(item = null) {
+      const modal = document.getElementById('modal');
+      const modalTitle = document.getElementById('modalTitle');
+      const submitText = document.getElementById('submitText');
+      const form = document.getElementById('stockForm');
+      
+      editingItem = item;
+      
+      if (item) {
+        modalTitle.textContent = 'Edit Item';
+        submitText.textContent = 'Update Item';
+        document.getElementById('category').value = item.category;
+        document.getElementById('quantity').value = item.quantity;
+        document.getElementById('minStock').value = item.min_stock;
+        document.getElementById('price').value = item.price;
+      } else {
+        modalTitle.textContent = 'Add New Item';
+        submitText.textContent = 'Add Item';
+        form.reset();
+      }
+      
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('modal').style.display = 'none';
+      document.getElementById('stockForm').reset();
+      editingItem = null;
+    }
+
+    async function handleEditSubmit(e) {
+      e.preventDefault();
+      
+      if (isSubmitting) return;
+      
+      isSubmitting = true;
+      const submitButton = document.getElementById('submitButton');
+      const submitText = document.getElementById('submitText');
+      const originalText = submitText.textContent;
+      
+      submitButton.disabled = true;
+      submitText.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const formData = {
+        category: document.getElementById('category').value,
+        quantity: parseInt(document.getElementById('quantity').value),
+        min_stock: parseInt(document.getElementById('minStock').value),
+        price: parseFloat(document.getElementById('price').value),
+        last_updated: new Date().toISOString()
+      };
+      
+      const updatedItem = { ...editingItem, ...formData };
+      const result = await window.dataSdk.update(updatedItem);
+      
+      submitButton.disabled = false;
+      submitText.textContent = originalText;
+      isSubmitting = false;
+      
+      if (result.isOk) {
+        showToast('Item updated successfully!', 'success');
+        closeModal();
+      } else {
+        showToast('Error updating item. Please try again.', 'error');
+      }
+    }
+
+    function populateAddItemDropdowns() {
+      const brandSelect = document.getElementById('addBrand');
+      const productSelect = document.getElementById('addProductType');
+      const sizeSelect = document.getElementById('addProductSize');
+      
+      brandSelect.innerHTML = '<option value="">Select Brand</option>' + 
+        currentBrands.map(brand => `<option value="${brand.__backendId}">${brand.brand_name}</option>`).join('');
+      
+      productSelect.innerHTML = '<option value="">Select Product Type</option>' + 
+        currentProducts.map(product => `<option value="${product.__backendId}">${product.product_name_type}</option>`).join('');
+      
+      sizeSelect.innerHTML = '<option value="">Select Product Size</option>' + 
+        currentSizes.map(size => `<option value="${size.__backendId}">${size.product_size_name}</option>`).join('');
+    }
+
+    async function handleAddSubmit(e) {
+      e.preventDefault();
+      
+      if (isSubmitting) return;
+      
+      if (currentData.length >= 999) {
+        showToast('Maximum limit of 999 items reached. Please delete some items first.', 'error');
+        return;
+      }
+      
+      const brandId = document.getElementById('addBrand').value;
+      const productId = document.getElementById('addProductType').value;
+      const sizeId = document.getElementById('addProductSize').value;
+      
+      if (!brandId || !productId || !sizeId) {
+        showToast('Please select brand, product type, and size!', 'error');
+        return;
+      }
+      
+      isSubmitting = true;
+      const submitButton = document.getElementById('addItemSubmit');
+      const originalText = submitButton.textContent;
+      
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const formData = {
+        id: Date.now().toString(),
+        brand_id: brandId,
+        product_id: productId,
+        size_id: sizeId,
+        category: document.getElementById('addCategory').value,
+        quantity: parseInt(document.getElementById('addQuantity').value),
+        min_stock: parseInt(document.getElementById('addMinStock').value),
+        price: parseFloat(document.getElementById('addPrice').value),
+        last_updated: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(formData);
+      
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+      isSubmitting = false;
+      
+      if (result.isOk) {
+        showToast('Item added successfully!', 'success');
+        document.getElementById('addItemForm').reset();
+        populateAddItemDropdowns();
+      } else {
+        showToast('Error adding item. Please try again.', 'error');
+      }
+    }
+
+    async function handleAddUser(e) {
+      e.preventDefault();
+      
+      if (isSubmitting) return;
+      
+      const username = document.getElementById('newUsername').value;
+      const password = document.getElementById('newPassword').value;
+      const role = document.getElementById('newRole').value;
+      
+      const userExists = currentUsers.some(u => u.username === username) || username === ADMIN_USERNAME;
+      if (userExists) {
+        showToast('Username already exists!', 'error');
+        return;
+      }
+      
+      isSubmitting = true;
+      const submitButton = document.getElementById('addUserSubmit');
+      const originalText = submitButton.textContent;
+      
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const userData = {
+        id: Date.now().toString(),
+        username: username,
+        password: password,
+        role: role,
+        created_at: new Date().toISOString(),
+        last_login: null
+      };
+      
+      const result = await window.dataSdk.create(userData);
+      
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+      isSubmitting = false;
+      
+      if (result.isOk) {
+        showToast('User added successfully!', 'success');
+        document.getElementById('addUserForm').reset();
+      } else {
+        showToast('Error adding user. Please try again.', 'error');
+      }
+    }
+
+    async function handleAddBrand(e) {
+      e.preventDefault();
+      
+      if (isSubmitting) return;
+      
+      const brandName = document.getElementById('newBrandName').value;
+      
+      const brandExists = currentBrands.some(b => b.brand_name.toLowerCase() === brandName.toLowerCase());
+      if (brandExists) {
+        showToast('Brand already exists!', 'error');
+        return;
+      }
+      
+      isSubmitting = true;
+      const submitButton = document.getElementById('addBrandSubmit');
+      const originalText = submitButton.textContent;
+      
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const brandData = {
+        id: Date.now().toString(),
+        brand_name: brandName,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(brandData);
+      
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+      isSubmitting = false;
+      
+      if (result.isOk) {
+        showToast('Brand added successfully!', 'success');
+        document.getElementById('addBrandForm').reset();
+      } else {
+        showToast('Error adding brand. Please try again.', 'error');
+      }
+    }
+
+    async function handleAddProduct(e) {
+      e.preventDefault();
+      
+      if (isSubmitting) return;
+      
+      const productName = document.getElementById('newProductName').value;
+      
+      const productExists = currentProducts.some(p => p.product_name_type.toLowerCase() === productName.toLowerCase());
+      if (productExists) {
+        showToast('Product already exists!', 'error');
+        return;
+      }
+      
+      isSubmitting = true;
+      const submitButton = document.getElementById('addProductSubmit');
+      const originalText = submitButton.textContent;
+      
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const productData = {
+        id: Date.now().toString(),
+        product_name_type: productName,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(productData);
+      
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+      isSubmitting = false;
+      
+      if (result.isOk) {
+        showToast('Product added successfully!', 'success');
+        document.getElementById('addProductForm').reset();
+      } else {
+        showToast('Error adding product. Please try again.', 'error');
+      }
+    }
+
+    async function handleAddSize(e) {
+      e.preventDefault();
+      
+      if (isSubmitting) return;
+      
+      const sizeName = document.getElementById('newSizeName').value;
+      
+      const sizeExists = currentSizes.some(s => s.product_size_name.toLowerCase() === sizeName.toLowerCase());
+      if (sizeExists) {
+        showToast('Size already exists!', 'error');
+        return;
+      }
+      
+      isSubmitting = true;
+      const submitButton = document.getElementById('addSizeSubmit');
+      const originalText = submitButton.textContent;
+      
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+      
+      const sizeData = {
+        id: Date.now().toString(),
+        product_size_name: sizeName,
+        created_at: new Date().toISOString()
+      };
+      
+      const result = await window.dataSdk.create(sizeData);
+      
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+      isSubmitting = false;
+      
+      if (result.isOk) {
+        showToast('Size added successfully!', 'success');
+        document.getElementById('addSizeForm').reset();
+      } else {
+        showToast('Error adding size. Please try again.', 'error');
+      }
+    }
+
+    function editStock(backendId) {
+      const item = currentData.find(i => i.__backendId === backendId);
+      if (item) {
+        openModal(item);
+      }
+    }
+
+    function showDeleteConfirm(backendId) {
+      const deleteButton = document.getElementById(`delete-${backendId}`);
+      const originalContent = deleteButton.innerHTML;
+      
+      deleteButton.innerHTML = '✓ Confirm Delete?';
+      deleteButton.style.backgroundColor = '#fca5a5';
+      
+      deleteButton.onclick = async () => {
+        deleteButton.disabled = true;
+        deleteButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+        
+        const item = currentData.find(i => i.__backendId === backendId);
+        if (item) {
+          const result = await window.dataSdk.delete(item);
+          
+          if (result.isOk) {
+            showToast('Item deleted successfully!', 'success');
+          } else {
+            showToast('Error deleting item. Please try again.', 'error');
+            deleteButton.disabled = false;
+            deleteButton.innerHTML = originalContent;
+            deleteButton.onclick = () => showDeleteConfirm(backendId);
+          }
+        }
+      };
+      
+      setTimeout(() => {
+        if (deleteButton.onclick) {
+          deleteButton.innerHTML = originalContent;
+          deleteButton.style.backgroundColor = '';
+          deleteButton.onclick = () => showDeleteConfirm(backendId);
+        }
+      }, 3000);
+    }
+
+    function showScreen(screenId) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('mainMenu').style.display = 'none';
+      document.getElementById('addItemScreen').style.display = 'none';
+      document.getElementById('dashboardScreen').style.display = 'none';
+      document.getElementById('settingsScreen').style.display = 'none';
+      document.getElementById('brandSelectionScreen').style.display = 'none';
+      document.getElementById('productSelectionScreen').style.display = 'none';
+      document.getElementById('sizeSelectionScreen').style.display = 'none';
+      document.getElementById('stockItemsScreen').style.display = 'none';
+      
+      document.getElementById(screenId).style.display = screenId === 'loginScreen' ? 'flex' : 'block';
+      
+      if (screenId === 'settingsScreen') {
+        const userMgmtSection = document.getElementById('userManagementSection');
+        const brandMgmtSection = document.getElementById('brandManagementSection');
+        const productMgmtSection = document.getElementById('productManagementSection');
+        const sizeMgmtSection = document.getElementById('sizeManagementSection');
+        
+        if (currentUserRole === 'admin') {
+          userMgmtSection.style.display = 'block';
+          brandMgmtSection.style.display = 'block';
+          productMgmtSection.style.display = 'block';
+          sizeMgmtSection.style.display = 'block';
+        } else {
+          userMgmtSection.style.display = 'none';
+          brandMgmtSection.style.display = 'none';
+          productMgmtSection.style.display = 'none';
+          sizeMgmtSection.style.display = 'none';
+        }
+      }
+      
+      if (screenId === 'addItemScreen') {
+        populateAddItemDropdowns();
+      }
+    }
+
+    function updateUserBadges(username, role) {
+      const isAdmin = role === 'admin';
+      const badgeClass = isAdmin ? 'admin-badge' : 'user-badge';
+      const badgeText = isAdmin ? 'ADMIN' : 'USER';
+      
+      document.getElementById('loggedInUser').textContent = username;
+      document.getElementById('settingsUsername').textContent = username;
+      
+      const userRoleBadge = document.getElementById('userRoleBadge');
+      const settingsRoleBadge = document.getElementById('settingsRoleBadge');
+      
+      userRoleBadge.className = badgeClass;
+      userRoleBadge.textContent = badgeText;
+      settingsRoleBadge.className = badgeClass;
+      settingsRoleBadge.textContent = badgeText;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const loginError = document.getElementById('loginError');
+      
+      let authenticated = false;
+      let userRole = '';
+      
+      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        authenticated = true;
+        userRole = ADMIN_ROLE;
+        localStorage.setItem('admin_last_login', new Date().toISOString());
+      } else {
+        const user = currentUsers.find(u => u.username === username && u.password === password);
+        if (user) {
+          authenticated = true;
+          userRole = user.role;
+          
+          const updatedUser = { ...user, last_login: new Date().toISOString() };
+          await window.dataSdk.update(updatedUser);
+        }
+      }
+      
+      if (authenticated) {
+        isLoggedIn = true;
+        currentUsername = username;
+        currentUserRole = userRole;
+        updateUserBadges(username, userRole);
+        showScreen('mainMenu');
+        showToast('Welcome, ' + username + '!', 'success');
+      } else {
+        loginError.classList.remove('hidden');
+        setTimeout(() => {
+          loginError.classList.add('hidden');
+        }, 3000);
+      }
+    }
+    
+    function handleLogout() {
+      isLoggedIn = false;
+      currentUsername = "";
+      currentUserRole = "";
+      showScreen('loginScreen');
+      document.getElementById('loginForm').reset();
+      showToast('Logged out successfully!', 'success');
+    }
+
+    // Excel Export Function (All Data)
+    function exportToExcel() {
+      if (currentData.length === 0) {
+        showToast('No data to export!', 'error');
+        return;
+      }
+
+      const exportButton = event.target.closest('button');
+      const originalHTML = exportButton.innerHTML;
+      exportButton.disabled = true;
+      exportButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+
+      try {
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+
+        // Prepare data with headers
+        const excelData = currentData.map(item => {
+          const brand = currentBrands.find(b => b.__backendId === item.brand_id);
+          const product = currentProducts.find(p => p.__backendId === item.product_id);
+          const size = currentSizes.find(s => s.__backendId === item.size_id);
+          
+          return {
+            'Brand': brand ? brand.brand_name : 'N/A',
+            'Product Type': product ? product.product_name_type : 'N/A',
+            'Size': size ? size.product_size_name : 'N/A',
+            'Category': item.category,
+            'Quantity': item.quantity,
+            'Min Stock': item.min_stock,
+            'Price (₹)': item.price,
+            'Total Value (₹)': (item.quantity * item.price).toFixed(2),
+            'Status': item.quantity <= item.min_stock ? 'Low Stock' : 'Normal',
+            'Last Updated': new Date(item.last_updated).toLocaleString('en-IN')
+          };
+        });
+
+        // Create worksheet
+        const ws = XLSX.utils.json_to_sheet(excelData);
+
+        // Set column widths
+        ws['!cols'] = [
+          { wch: 20 }, // Brand
+          { wch: 25 }, // Product Type
+          { wch: 12 }, // Size
+          { wch: 20 }, // Category
+          { wch: 10 }, // Quantity
+          { wch: 12 }, // Min Stock
+          { wch: 12 }, // Price
+          { wch: 15 }, // Total Value
+          { wch: 12 }, // Status
+          { wch: 20 }  // Last Updated
+        ];
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Inventory Report');
+
+        // Generate filename with date
+        const date = new Date().toISOString().split('T')[0];
+        const filename = `Stock_Management_Report_${date}.xlsx`;
+
+        // Export file
+        XLSX.writeFile(wb, filename);
+
+        showToast('Excel file downloaded successfully! 📊', 'success');
+      } catch (error) {
+        showToast('Error creating Excel file. Please try again.', 'error');
+        console.error('Excel export error:', error);
+      } finally {
+        exportButton.disabled = false;
+        exportButton.innerHTML = originalHTML;
+      }
+    }
+
+    // Excel Export Function (Filtered by Brand/Product/Size)
+    function exportFilteredExcel(brand, product, size) {
+      const filteredItems = currentData.filter(item => 
+        item.brand_id === brand.__backendId && 
+        item.product_id === product.__backendId &&
+        item.size_id === size.__backendId
+      );
+
+      if (filteredItems.length === 0) {
+        showToast('No data to export!', 'error');
+        return;
+      }
+
+      const exportButton = document.getElementById('exportExcelStock');
+      const originalHTML = exportButton.innerHTML;
+      exportButton.disabled = true;
+      exportButton.innerHTML = '<div class="loading-spinner mx-auto"></div>';
+
+      try {
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+
+        // Prepare data with headers
+        const excelData = filteredItems.map(item => {
+          return {
+            'Brand': brand.brand_name,
+            'Product Type': product.product_name_type,
+            'Size': size.product_size_name,
+            'Category': item.category,
+            'Quantity': item.quantity,
+            'Min Stock': item.min_stock,
+            'Price (₹)': item.price,
+            'Total Value (₹)': (item.quantity * item.price).toFixed(2),
+            'Status': item.quantity <= item.min_stock ? 'Low Stock' : 'Normal',
+            'Last Updated': new Date(item.last_updated).toLocaleString('en-IN')
+          };
+        });
+
+        // Create worksheet
+        const ws = XLSX.utils.json_to_sheet(excelData);
+
+        // Set column widths
+        ws['!cols'] = [
+          { wch: 20 }, // Brand
+          { wch: 25 }, // Product Type
+          { wch: 12 }, // Size
+          { wch: 20 }, // Category
+          { wch: 10 }, // Quantity
+          { wch: 12 }, // Min Stock
+          { wch: 12 }, // Price
+          { wch: 15 }, // Total Value
+          { wch: 12 }, // Status
+          { wch: 20 }  // Last Updated
+        ];
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
+
+        // Generate filename with date
+        const date = new Date().toISOString().split('T')[0];
+        const filename = `${brand.brand_name}_${product.product_name_type}_${size.product_size_name}_${date}.xlsx`;
+
+        // Export file
+        XLSX.writeFile(wb, filename);
+
+        showToast('Excel file downloaded successfully! 📊', 'success');
+      } catch (error) {
+        showToast('Error creating Excel file. Please try again.', 'error');
+        console.error('Excel export error:', error);
+      } finally {
+        exportButton.disabled = false;
+        exportButton.innerHTML = originalHTML;
+      }
+    }
+    
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    document.getElementById('logoutButton').addEventListener('click', handleLogout);
+    
+    document.getElementById('menuAddItem').addEventListener('click', () => showScreen('addItemScreen'));
+    document.getElementById('menuViewStock').addEventListener('click', () => showScreen('brandSelectionScreen'));
+    document.getElementById('menuDashboard').addEventListener('click', () => showScreen('dashboardScreen'));
+    document.getElementById('menuSettings').addEventListener('click', () => showScreen('settingsScreen'));
+    
+    document.getElementById('backFromAdd').addEventListener('click', () => showScreen('mainMenu'));
+    document.getElementById('backFromDashboard').addEventListener('click', () => showScreen('mainMenu'));
+    document.getElementById('backFromSettings').addEventListener('click', () => showScreen('mainMenu'));
+    document.getElementById('backFromBrandSelection').addEventListener('click', () => showScreen('mainMenu'));
+    document.getElementById('backFromProductSelection').addEventListener('click', () => {
+      selectedBrand = null;
+      showScreen('brandSelectionScreen');
+    });
+    document.getElementById('backFromSizeSelection').addEventListener('click', () => {
+      selectedProduct = null;
+      showScreen('productSelectionScreen');
+    });
+    document.getElementById('backFromStockItems').addEventListener('click', () => {
+      selectedSize = null;
+      showScreen('sizeSelectionScreen');
+    });
+    
+    document.getElementById('addItemForm').addEventListener('submit', handleAddSubmit);
+    document.getElementById('addUserForm').addEventListener('submit', handleAddUser);
+    document.getElementById('addBrandForm').addEventListener('submit', handleAddBrand);
+    document.getElementById('addProductForm').addEventListener('submit', handleAddProduct);
+    document.getElementById('addSizeForm').addEventListener('submit', handleAddSize);
+    document.getElementById('stockForm').addEventListener('submit', handleEditSubmit);
+    document.getElementById('cancelButton').addEventListener('click', closeModal);
+    document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+    document.getElementById('exportExcelDashboard').addEventListener('click', exportToExcel);
+    document.getElementById('exportExcelStock').addEventListener('click', () => {
+      exportFilteredExcel(selectedBrand, selectedProduct, selectedSize);
+    });
+    
+    document.getElementById('modal').addEventListener('click', (e) => {
+      if (e.target.id === 'modal') {
+        closeModal();
+      }
+    });
+
+    async function initApp() {
+      const dataSdkResult = await window.dataSdk.init(dataHandler);
+      if (!dataSdkResult.isOk) {
+        showToast('Error initializing app. Please refresh the page.', 'error');
+        return;
+      }
+      
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange,
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              {
+                get: () => config.background_color || defaultConfig.background_color,
+                set: (value) => {
+                  window.elementSdk.config.background_color = value;
+                  window.elementSdk.setConfig({ background_color: value });
+                }
+              },
+              {
+                get: () => config.surface_color || defaultConfig.surface_color,
+                set: (value) => {
+                  window.elementSdk.config.surface_color = value;
+                  window.elementSdk.setConfig({ surface_color: value });
+                }
+              },
+              {
+                get: () => config.text_color || defaultConfig.text_color,
+                set: (value) => {
+                  window.elementSdk.config.text_color = value;
+                  window.elementSdk.setConfig({ text_color: value });
+                }
+              },
+              {
+                get: () => config.primary_action_color || defaultConfig.primary_action_color,
+                set: (value) => {
+                  window.elementSdk.config.primary_action_color = value;
+                  window.elementSdk.setConfig({ primary_action_color: value });
+                }
+              },
+              {
+                get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+                set: (value) => {
+                  window.elementSdk.config.secondary_action_color = value;
+                  window.elementSdk.setConfig({ secondary_action_color: value });
+                }
+              }
+            ],
+            borderables: [],
+            fontEditable: {
+              get: () => config.font_family || defaultConfig.font_family,
+              set: (value) => {
+                window.elementSdk.config.font_family = value;
+                window.elementSdk.setConfig({ font_family: value });
+              }
+            },
+            fontSizeable: {
+              get: () => config.font_size || defaultConfig.font_size,
+              set: (value) => {
+                window.elementSdk.config.font_size = value;
+                window.elementSdk.setConfig({ font_size: value });
+              }
+            }
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ["app_title", config.app_title || defaultConfig.app_title],
+            ["add_button_text", config.add_button_text || defaultConfig.add_button_text],
+            ["empty_message", config.empty_message || defaultConfig.empty_message]
+          ])
+        });
+      }
+    }
+
+    initApp();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9ae7b06af1cc90a4',t:'MTc2NTgyMDAzOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
